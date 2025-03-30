@@ -7,12 +7,14 @@ import numpy as np
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.llms import GoogleGenerativeAI  # Provided by langchain-google-genai
+import google.generativeai as palm  # Import the package as a whole
 
-# Set the Gemini API key from st.secrets for the langchain integration to pick up
-os.environ["GENAI_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
+# Set the Gemini API key from st.secrets
+GEMINI_API_KEY = st.secrets["gemini_api_key"]
+palm.configure(api_key=GEMINI_API_KEY)
 
 def get_transcript(video_url):
+    # Extract the YouTube video ID
     video_id = video_url.split("v=")[-1].split("&")[0]
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
@@ -40,21 +42,20 @@ def vdb_from_url(url):
 def find_relevant_chunk(db, query):
     embedding = db["embedding_model"].embed_documents([query])[0]
     distances, indices = db["index"].search(np.array([embedding]), k=1)
-    
     return db["chunks"][indices[0][0]] if distances[0][0] < 0.5 else None
 
 def response_for_query(db, query):
     relevant_chunk = find_relevant_chunk(db, query)
+    
     if not relevant_chunk:
         return "Sorry! The question is out of the current context."
     
     prompt = f"Based on the following transcript excerpt, answer the question:\n\n{relevant_chunk}\n\nQuestion: {query}"
-    
-    # Instantiate the LLM using langchain's integration with Google Generative AI.
-    llm = GoogleGenerativeAI(model="gemini-pro")  # Adjust model name if necessary
-    response = llm(prompt)
-    return response
+    response = palm.generate_text(prompt=prompt, model="gemini-pro")
+    # Adjust based on the response object's structure (commonly, response.result contains the answer)
+    return response.result if hasattr(response, "result") else "Sorry! Unable to generate an answer."
 
+# Streamlit UI
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Agdasima');
