@@ -8,3 +8,4 @@ pandas
 google-generativeai
 langchain-community
 pytube
+pysocks
