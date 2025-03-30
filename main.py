@@ -139,7 +139,7 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Agdasima');
     .custom-text-01 { font-family: 'Agdasima', sans-serif; font-size: 60px; color: cyan; }
     </style>
-    <p class="custom-text-01">YouTube Assistant using Google Gemini</p>
+    <h1 class="custom-text-01">YouTube Assistant using Google Gemini</h1>
     """, unsafe_allow_html=True)
 
 st.divider()
@@ -183,4 +183,15 @@ if st.button("Fetch the answer..", use_container_width=True):
                 st.write("")
                 st.write("### Answer:")
                 st.markdown(wrapped_text) # Use markdown for better formatting
-       
+
+
+st.divider()
+col1001, col1002, col1003, col1004, col1005 = st.columns([10,10,10,10,15])
+with col1005:
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Agdasima');
+        .custom-text-10 { font-family: 'Agdasima', sans-serif; font-size: 28px; color: Gold; }
+        </style>
+        <p class="custom-text-10">An Effort by : MAVERICK_GR</p>
+    """, unsafe_allow_html=True)
