@@ -21,8 +21,11 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 def vdb_from_url(url):
     try:
-        # Removed the add_video_info parameter to avoid the 400 error.
-        loader = YoutubeLoader.from_youtube_url(url)
+        # Check if a proxy is provided in the secrets; expected as a dict
+        proxies = st.secrets.get("PROXY", None)
+        
+        # Pass the proxies parameter if available; this may help avoid IP blocks
+        loader = YoutubeLoader.from_youtube_url(url, proxies=proxies)
         documents = loader.load()
 
         if not documents:
