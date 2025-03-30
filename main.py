@@ -89,6 +89,7 @@ def find_relevant_chunks(vector_index, query, k=3):
         st.error(f"Error searching vector index: {e}")
         return None
 
+      
 def generate_response_with_gemini(context, query):
     """Generates an answer using Gemini based on context and query."""
     try:
@@ -123,6 +124,14 @@ Answer:"""
     except Exception as e:
         st.error(f"Error generating response with Gemini: {e}")
         return "Sorry! An error occurred while generating the answer."
+
+def response_for_query(db, query): # Keep the response_for_query function as a wrapper
+    relevant_context = find_relevant_chunks(db, query)
+    if not relevant_context:
+        return "Sorry! The question is out of the current context."
+    return generate_response_with_gemini(relevant_context, query) # Call the new function
+
+    
 
 # --- Streamlit UI ---
 st.markdown("""
