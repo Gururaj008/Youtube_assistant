@@ -7,3 +7,4 @@ tiktoken
 pandas
 google-generativeai
 langchain-community
+pytube
