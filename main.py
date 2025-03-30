@@ -1,16 +1,16 @@
 import streamlit as st
 import textwrap
-from google.generativeai import configure, generate_text
+import os
 from youtube_transcript_api import YouTubeTranscriptApi
 import faiss
 import numpy as np
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.llms import GoogleGenerativeAI  # Provided by langchain-google-genai
 
-# Retrieve the Gemini API key from st.secrets
-GEMINI_API_KEY = st.secrets["GOOGLE_API_KEY"]
-configure(api_key=GEMINI_API_KEY)
+# Set the Gemini API key from st.secrets for the langchain integration to pick up
+os.environ["GENAI_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
 def get_transcript(video_url):
     video_id = video_url.split("v=")[-1].split("&")[0]
@@ -45,14 +45,15 @@ def find_relevant_chunk(db, query):
 
 def response_for_query(db, query):
     relevant_chunk = find_relevant_chunk(db, query)
-    
     if not relevant_chunk:
         return "Sorry! The question is out of the current context."
-
-    prompt = f"Based on the following transcript excerpt, answer the question:\n\n{relevant_chunk}\n\nQuestion: {query}"
-    response = generate_text(prompt=prompt, model="gemini-pro")
     
-    return response.text if response and hasattr(response, 'text') else "Sorry! Unable to generate an answer."
+    prompt = f"Based on the following transcript excerpt, answer the question:\n\n{relevant_chunk}\n\nQuestion: {query}"
+    
+    # Instantiate the LLM using langchain's integration with Google Generative AI.
+    llm = GoogleGenerativeAI(model="gemini-pro")  # Adjust model name if necessary
+    response = llm(prompt)
+    return response
 
 st.markdown("""
     <style>
