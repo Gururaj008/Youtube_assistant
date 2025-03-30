@@ -1,5 +1,7 @@
 import traceback
-from langchain_community.document_loaders import YoutubeLoader
+from urllib.parse import urlparse, parse_qs
+
+from langchain.docstore.document import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
@@ -10,23 +12,46 @@ import textwrap
 import streamlit as st
 import os
 import google.generativeai as genai
+from youtube_transcript_api import YouTubeTranscriptApi
 
 # Set Google API Key from Streamlit secrets
 if "GOOGLE_API_KEY" not in st.secrets:
     st.error("Google API Key not found. Please add it to your Streamlit secrets.")
     st.stop()
 
-# Configure the Google Generative AI library using the key from secrets
+# Configure Google Generative AI with the key from secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+
+def get_video_id(url):
+    """Extracts the video ID from a YouTube URL."""
+    parsed_url = urlparse(url)
+    query_params = parse_qs(parsed_url.query)
+    video_id = query_params.get("v", [None])[0]
+    if not video_id and parsed_url.hostname in ["youtu.be"]:
+        # For shortened URLs like https://youtu.be/VIDEO_ID
+        video_id = parsed_url.path.lstrip("/")
+    return video_id
+
+def load_youtube_transcript(url, proxies=None):
+    """
+    Loads the YouTube transcript using youtube_transcript_api.
+    Pass proxies (as a dict) if provided.
+    Returns a list containing a single Document with the full transcript.
+    """
+    video_id = get_video_id(url)
+    if not video_id:
+        raise ValueError("Invalid YouTube URL, unable to extract video ID.")
+    transcript = YouTubeTranscriptApi.get_transcript(video_id, proxies=proxies)
+    full_text = " ".join(segment["text"] for segment in transcript)
+    return [Document(page_content=full_text, metadata={"video_id": video_id})]
 
 def vdb_from_url(url):
     try:
         # Check if a proxy is provided in the secrets; expected as a dict
         proxies = st.secrets.get("PROXY", None)
         
-        # Pass the proxies parameter if available; this may help avoid IP blocks
-        loader = YoutubeLoader.from_youtube_url(url, proxies=proxies)
-        documents = loader.load()
+        # Use the custom loader function to get the transcript as Document objects
+        documents = load_youtube_transcript(url, proxies=proxies)
 
         if not documents:
             st.warning("Could not load transcript. Please check the URL and ensure the video has transcripts available.")
@@ -47,14 +72,12 @@ def vdb_from_url(url):
 
     except Exception as e:
         st.error(f"Error processing YouTube URL: {e}")
-        # Log the full traceback for debugging purposes
         print("Detailed traceback:", traceback.format_exc())
         return None
 
 def response_for_query(db, query, k):
     # Perform similarity search on the FAISS index
     docs = db.similarity_search(query, k=k)
-    # Combine the page contents of the documents
     page_content = " ".join([d.page_content for d in docs])
 
     # Initialize the LLM with deterministic output
@@ -82,7 +105,7 @@ def response_for_query(db, query, k):
     # Create and run the LLMChain to generate the answer
     chain = LLMChain(llm=llm, prompt=prompt)
     response = chain.run(question=query, docs=page_content)
-    response = response.replace("\n", "")  # Remove newlines for cleaner output
+    response = response.replace("\n", "")
     return response
 
 if __name__ == "__main__":
@@ -102,7 +125,7 @@ if __name__ == "__main__":
         unsafe_allow_html=True)
     st.write('')
     st.markdown(
-        '<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using the <code>YoutubeLoader</code> from <code>langchain-community</code>. The loaded documents are then split into manageable chunks using the <code>RecursiveCharacterTextSplitter</code> class, and these chunks are transformed into vector embeddings using the <code>GoogleGenerativeAIEmbeddings</code> class. These embeddings are stored in a FAISS vector database using <code>langchain-community</code>.</div>',
+        '<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using a custom loader that leverages the youtube_transcript_api. The loaded transcript is then split into manageable chunks using the <code>RecursiveCharacterTextSplitter</code> class, and these chunks are transformed into vector embeddings using the <code>GoogleGenerativeAIEmbeddings</code> class. These embeddings are stored in a FAISS vector database.</div>',
         unsafe_allow_html=True)
     st.write('')
     st.markdown(
@@ -129,11 +152,10 @@ if __name__ == "__main__":
         else:
             with st.spinner("Loading transcript and creating embeddings..."):
                 db = vdb_from_url(url)
-
             if db:
                 with st.spinner("Searching for the answer..."):
                     response = response_for_query(db, que, 4)
-                    wrapper = textwrap.TextWrapper(width=100)  # Adjust width as needed
+                    wrapper = textwrap.TextWrapper(width=100)
                     wrapped_text = wrapper.fill(response)
                     st.write('')
                     st.write('')
