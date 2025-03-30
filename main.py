@@ -1,46 +1,71 @@
-from langchain.document_loaders import YoutubeLoader
+# Corrected Imports based on Deprecation Warnings
+from langchain_community.document_loaders import YoutubeLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-#from langchain.llms import OpenAI # replaced with Google LLM
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
-from langchain.vectorstores import FAISS
-#from langchain.embeddings.openai import OpenAIEmbeddings # replaced with Google Embeddings
+# Corrected Imports based on Deprecation Warnings
+from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI # importing Google LLM
+from langchain_google_genai import ChatGoogleGenerativeAI
 import textwrap
 import streamlit as st
 import os
 
-def vdb_from_url(url): # removed openai_api_key argument
-  #os.environ["OPENAI_API_KEY"] = openai_api_key # No need for OpenAI API key anymore
-  loader = YoutubeLoader.from_youtube_url(url)
-  transcript = loader.load()
+# Set Google API Key from Streamlit secrets
+# Ensure GOOGLE_API_KEY is set in your Streamlit secrets
+if "GOOGLE_API_KEY" not in st.secrets:
+    st.error("Google API Key not found. Please add it to your Streamlit secrets.")
+    st.stop()
 
-  # Robustly extract text and handle potential non-string types
-  def get_text_content(transcript_piece):
-      text = transcript_piece.get("text", "") # Safely get 'text', default to empty string if missing
-      if isinstance(text, str):
-          return text.strip(" ")
-      else:
-          return "" # Return empty string if text is not a string
-
-  processed_transcript = " ".join(
-      get_text_content(transcript_piece) for transcript_piece in transcript
-  )
+# Configure the library using the key from secrets
+import google.generativeai as genai
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 
-  #embeddings = OpenAIEmbeddings() # replaced with Google Embeddings
-  embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001") # using Google Embeddings
-  text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-  docs = text_splitter.split_text(processed_transcript) # Split the processed text
-  db = FAISS.from_texts(docs, embedding=embeddings) # Create FAISS from texts, not documents
-  return db
+def vdb_from_url(url):
+    try:
+        loader = YoutubeLoader.from_youtube_url(url, add_video_info=True) # add_video_info can be helpful
+        # loader.load() returns a list of Document objects
+        documents = loader.load()
+
+        if not documents:
+            st.warning("Could not load transcript. Please check the URL and ensure the video has transcripts available.")
+            return None
+
+        # Use the splitter directly on the documents
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        docs_splitted = text_splitter.split_documents(documents)
+
+        if not docs_splitted:
+             st.warning("Transcript loaded but could not be split into chunks.")
+             return None
+
+        # Create embeddings
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+
+        # Create FAISS index from the split Document objects
+        db = FAISS.from_documents(docs_splitted, embeddings)
+        return db
+
+    except Exception as e:
+        st.error(f"Error processing YouTube URL: {e}")
+        # Optionally log the full error for debugging
+        # print(f"Detailed error in vdb_from_url: {traceback.format_exc()}")
+        return None
+
 
 def response_for_query(db,query, k):
+  # Perform similarity search on the FAISS index
+  # similarity_search returns Document objects
   docs = db.similarity_search(query, k = k)
+
+  # Extract page_content from the Document objects
   page_content = " ".join([d.page_content for d in docs])
-  #llm = OpenAI(model = "text-davinci-003") # replaced with Google LLM
-  llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0) # using Google LLM (gemini-pro)
+
+  # Initialize the LLM
+  llm = ChatGoogleGenerativeAI(model="gemini-pro", temperature=0.0) # Changed temperature to 0.0 for more deterministic output
+
+  # Define the prompt template
   prompt = PromptTemplate(
       input_variables=["question","docs"],
       template = """
@@ -58,9 +83,11 @@ def response_for_query(db,query, k):
       Do not mention the words "Video transcript" in your response.
        """,
   )
+
+  # Create and run the LLMChain
   chain = LLMChain(llm = llm, prompt = prompt)
   response = chain.run(question = query, docs = page_content)
-  response = response.replace("\n", "")
+  response = response.replace("\n", "") # Remove newlines for cleaner output (optional)
   return response
 
 
@@ -75,27 +102,38 @@ if __name__ == "__main__":
                     <p class="custom-text-01">Youtube assistant using Langchain and Google Gemini</p>
                     """, unsafe_allow_html=True)
     st.divider()
-    st.markdown('<div style="text-align: justify">The Streamlit application “Youtube Assistant using Langchain and Google Gemini” is a sophisticated tool that leverages the power of machine learning and natural language processing to enhance the user’s interaction with YouTube content. The application accepts a YouTube URL and a user question as inputs, and uses similarity search on a vector database containing embeddings to provide relevant answers. This is achieved by transforming the content of the YouTube video into a searchable vector database using Langchain and Google Gemini technologies.</div>', unsafe_allow_html=True)
+    # Updated description to reflect correct library usage
+    st.markdown('<div style="text-align: justify">The Streamlit application “Youtube Assistant using Langchain and Google Gemini” is a sophisticated tool that leverages the power of machine learning and natural language processing to enhance the user’s interaction with YouTube content. The application accepts a YouTube URL and a user question as inputs, and uses similarity search on a vector database containing embeddings to provide relevant answers. This is achieved by transforming the content of the YouTube video into a searchable vector database using Langchain Community, Langchain Core, and Google Gemini technologies.</div>', unsafe_allow_html=True)
     st.write('')
-    st.markdown('<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using the YoutubeLoader class. The transcript is then processed to extract text content robustly, split into manageable chunks using the RecursiveCharacterTextSplitter class, and these chunks are transformed into vector embeddings using the GoogleGenerativeAIEmbeddings class. These embeddings are stored in a FAISS vector database. </div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using the `YoutubeLoader` from `langchain-community`. The loaded documents are then split into manageable chunks using the `RecursiveCharacterTextSplitter` class, and these chunks are transformed into vector embeddings using the `GoogleGenerativeAIEmbeddings` class. These embeddings are stored in a FAISS vector database using `langchain-community`. </div>', unsafe_allow_html=True)
     st.write('')
-    st.markdown('<div style="text-align: justify">When a user poses a question, the application performs a similarity search on the vector database to identify the most relevant information to answer the user’s query. The application uses the LLMChain class with Google Gemini to generate a detailed response based on the user’s question and the content of the video transcript. If the question is beyond the scope of the video transcript, the application will respond with “Sorry! The question is out of the current context”. </div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: justify">When a user poses a question, the application performs a similarity search on the vector database to identify the most relevant information to answer the user’s query. The application uses the `LLMChain` class with Google Gemini to generate a detailed response based on the user’s question and the content of the video transcript. If the question is beyond the scope of the video transcript, the application will respond with “Sorry! The question is out of the current context”. </div>', unsafe_allow_html=True)
     st.write('')
     st.markdown('<div style="text-align: justify">This application serves as a powerful tool for users who wish to extract specific information from YouTube content without having to watch the entire video. Whether it’s a lecture, tutorial, documentary, or any other informational content, the “Youtube Assistant using Langchain and Google Gemini” streamlines the process of finding the answers you need. It’s like having a personal assistant for your YouTube viewing experience! </div>', unsafe_allow_html=True)
     st.write('')
     st.divider()
-    #open_api_key = st.text_input('OPENAI API Key','Please enter here..',key=1) # Removed OpenAI API Key input
-    #st.write('') # Removed OpenAI API Key input
-    url = st.text_input('Youtube URL','Please enter here..',key=2)
+
+    url = st.text_input('Youtube URL','Please enter here..',key="url_input") # Changed key for clarity
     st.write('')
-    que = st.text_input('Your Question','Please enter here..',key=3)
+    que = st.text_input('Your Question','Please enter here..',key="question_input") # Changed key for clarity
     st.write('')
     st.write('')
+
     if st.button('Fetch the answer..', use_container_width=True):
-       db = vdb_from_url(url) # removed open_api_key argument
-       response= response_for_query(db,que,4)
-       wrapper = textwrap.TextWrapper(width=100)
-       wrapped_text = wrapper.fill(response)
-       st.write('')
-       st.write('')
-       st.write(wrapped_text)
+        if not url:
+            st.warning("Please enter a YouTube URL.")
+        elif not que:
+            st.warning("Please enter your question.")
+        else:
+            with st.spinner("Loading transcript and creating embeddings..."):
+                db = vdb_from_url(url)
+
+            if db:
+                with st.spinner("Searching for the answer..."):
+                    response = response_for_query(db, que, 4)
+                    wrapper = textwrap.TextWrapper(width=100) # Adjust width as needed
+                    wrapped_text = wrapper.fill(response)
+                    st.write('')
+                    st.write('')
+                    st.markdown("### Answer:") # Use markdown for better formatting potential
+                    st.write(wrapped_text)
