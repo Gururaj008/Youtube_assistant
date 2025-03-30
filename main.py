@@ -15,11 +15,25 @@ def vdb_from_url(url): # removed openai_api_key argument
   #os.environ["OPENAI_API_KEY"] = openai_api_key # No need for OpenAI API key anymore
   loader = YoutubeLoader.from_youtube_url(url)
   transcript = loader.load()
+
+  # Robustly extract text and handle potential non-string types
+  def get_text_content(transcript_piece):
+      text = transcript_piece.get("text", "") # Safely get 'text', default to empty string if missing
+      if isinstance(text, str):
+          return text.strip(" ")
+      else:
+          return "" # Return empty string if text is not a string
+
+  processed_transcript = " ".join(
+      get_text_content(transcript_piece) for transcript_piece in transcript
+  )
+
+
   #embeddings = OpenAIEmbeddings() # replaced with Google Embeddings
   embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001") # using Google Embeddings
   text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-  docs = text_splitter.split_documents(transcript)
-  db = FAISS.from_documents(docs, embeddings)
+  docs = text_splitter.split_text(processed_transcript) # Split the processed text
+  db = FAISS.from_texts(docs, embedding=embeddings) # Create FAISS from texts, not documents
   return db
 
 def response_for_query(db,query, k):
@@ -63,7 +77,7 @@ if __name__ == "__main__":
     st.divider()
     st.markdown('<div style="text-align: justify">The Streamlit application “Youtube Assistant using Langchain and Google Gemini” is a sophisticated tool that leverages the power of machine learning and natural language processing to enhance the user’s interaction with YouTube content. The application accepts a YouTube URL and a user question as inputs, and uses similarity search on a vector database containing embeddings to provide relevant answers. This is achieved by transforming the content of the YouTube video into a searchable vector database using Langchain and Google Gemini technologies.</div>', unsafe_allow_html=True)
     st.write('')
-    st.markdown('<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using the YoutubeLoader class. The transcript is then split into manageable chunks using the RecursiveCharacterTextSplitter class, and these chunks are transformed into vector embeddings using the GoogleGenerativeAIEmbeddings class. These embeddings are stored in a FAISS vector database. </div>', unsafe_allow_html=True)
+    st.markdown('<div style="text-align: justify">The application begins by loading the transcript of the provided YouTube video using the YoutubeLoader class. The transcript is then processed to extract text content robustly, split into manageable chunks using the RecursiveCharacterTextSplitter class, and these chunks are transformed into vector embeddings using the GoogleGenerativeAIEmbeddings class. These embeddings are stored in a FAISS vector database. </div>', unsafe_allow_html=True)
     st.write('')
     st.markdown('<div style="text-align: justify">When a user poses a question, the application performs a similarity search on the vector database to identify the most relevant information to answer the user’s query. The application uses the LLMChain class with Google Gemini to generate a detailed response based on the user’s question and the content of the video transcript. If the question is beyond the scope of the video transcript, the application will respond with “Sorry! The question is out of the current context”. </div>', unsafe_allow_html=True)
     st.write('')
