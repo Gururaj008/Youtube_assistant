@@ -94,7 +94,7 @@ def generate_response_with_gemini(context, query):
     """Generates an answer using Gemini based on context and query."""
     try:
         # Use the current standard API for Gemini
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.0-flash-thinking-exp-01-21')
 
         prompt = f"""You are a helpful YouTube assistant.
 Answer the following question based *only* on the provided transcript excerpt(s).
