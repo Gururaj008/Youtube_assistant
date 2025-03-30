@@ -14,7 +14,7 @@ GEMINI_API_KEY = st.secrets["gemini_api_key"]
 palm.configure(api_key=GEMINI_API_KEY)
 
 def get_transcript(video_url):
-    # Extract the YouTube video ID
+    # Extract YouTube video ID
     video_id = video_url.split("v=")[-1].split("&")[0]
     try:
         transcript = YouTubeTranscriptApi.get_transcript(video_id)
@@ -42,20 +42,27 @@ def vdb_from_url(url):
 def find_relevant_chunk(db, query):
     embedding = db["embedding_model"].embed_documents([query])[0]
     distances, indices = db["index"].search(np.array([embedding]), k=1)
+    
     return db["chunks"][indices[0][0]] if distances[0][0] < 0.5 else None
 
 def response_for_query(db, query):
     relevant_chunk = find_relevant_chunk(db, query)
-    
     if not relevant_chunk:
         return "Sorry! The question is out of the current context."
     
-    prompt = f"Based on the following transcript excerpt, answer the question:\n\n{relevant_chunk}\n\nQuestion: {query}"
-    response = palm.generate_text(prompt=prompt, model="gemini-pro")
-    # Adjust based on the response object's structure (commonly, response.result contains the answer)
-    return response.result if hasattr(response, "result") else "Sorry! Unable to generate an answer."
+    prompt = (
+        f"Based on the following transcript excerpt, answer the question:\n\n"
+        f"{relevant_chunk}\n\nQuestion: {query}"
+    )
+    
+    # Use palm.chat() instead of palm.generate_text()
+    # Note: Adjust the model name if needed; here we assume "gemini-pro" is valid.
+    response = palm.chat(prompt=prompt, model="gemini-pro")
+    
+    # The response object structure may vary.
+    # Here we assume the generated text is stored in response.last.
+    return response.last if hasattr(response, "last") else "Sorry! Unable to generate an answer."
 
-# Streamlit UI
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Agdasima');
@@ -85,9 +92,9 @@ if st.button("Fetch the answer..", use_container_width=True):
     if not db:
         st.error("Could not retrieve transcript. Please check the URL.")
     else:
-        response = response_for_query(db, que)
+        answer = response_for_query(db, que)
         wrapper = textwrap.TextWrapper(width=100)
-        wrapped_text = wrapper.fill(response)
+        wrapped_text = wrapper.fill(answer)
         st.write("")
         st.write("")
         st.write(wrapped_text)
